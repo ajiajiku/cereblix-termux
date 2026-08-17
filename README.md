@@ -1,32 +1,36 @@
 # cereblix-termux
 
-Termux tooling for running the open-source Cereblix CPU miner on Android devices supported by Termux.
+Termux tooling for building and running the open-source Cereblix CPU miner on Android devices.
 
-## Project goal
+## Status
 
-Target **Android 7.0 / API 24 and newer**, with automatic detection of the device ABI. The first development target is ARM64; ARMv7 support will be added and tested separately.
+**ARM64 / aarch64 has been successfully tested on a real Termux device.** The miner connected to `https://cereblix.com/pool/api` and received an accepted share during testing.
 
-This repository contains the Termux installer, launcher, configuration and build automation. It does **not** redistribute the original Cereblix APK or its `libnmminer.so`.
+The project is still experimental. ARMv7/32-bit validation and release binaries are not yet complete.
 
-The upstream Cereblix source is available at:
+## What this project does
+
+- Detects Android API level and CPU ABI.
+- Installs the required Termux build dependencies.
+- Clones the upstream Cereblix `xmrig` branch.
+- Builds `cereblix-miner` locally for the device architecture.
+- Creates a persistent private configuration file.
+- Provides a simple `start.sh` launcher.
+
+This repository does **not** redistribute the original Cereblix APK or `libnmminer.so`.
+
+Upstream source:
 
 - https://github.com/CereblixCRB/cereblix
 
-The upstream project documents a Go 1.21+ build and the standalone miner command `cereblix-miner`. We will build/test the Android/Termux package from source rather than modifying the APK.
+## Requirements
 
-## Current status
+- Android 7.0 / API 24 or newer.
+- Termux with a working package repository.
+- ARM64 (`arm64-v8a`) is the primary tested target.
+- Go 1.21 or newer.
 
-- [x] Repository initialized
-- [x] Android API/ABI detection
-- [x] Termux environment checks
-- [x] Installer skeleton
-- [x] Launcher/configuration skeleton
-- [ ] ARM64 native build validation on Android 7
-- [ ] ARMv7 build validation on Android 7
-- [ ] Release artifacts
-- [ ] Automated update channel
-
-## Install from a cloned checkout
+## Install
 
 ```sh
 git clone https://github.com/ajiajiku/cereblix-termux.git
@@ -35,10 +39,71 @@ chmod +x install.sh
 ./install.sh
 ```
 
-The installer will refuse unsupported Android versions and will report the detected ABI before installing/building anything.
+After installation:
+
+```sh
+~/.local/share/cereblix-termux/start.sh
+```
+
+The launcher asks for the CRB wallet address if one has not been configured, then starts the miner using the detected CPU thread count.
+
+## Configuration
+
+The private configuration is stored at:
+
+```text
+~/.local/share/cereblix-termux/config/miner.env
+```
+
+Example:
+
+```sh
+CRB_ADDR="crb1..."
+NODE="https://cereblix.com/pool/api"
+THREADS="7"
+```
+
+`install.sh` will not overwrite an existing `miner.env` during reinstall.
+
+## Important: architecture
+
+Do not download and run the upstream `linux-amd64` binary on an Android ARM64 phone. This project builds the miner locally so the executable matches the Termux device architecture.
+
+You can verify the device architecture with:
+
+```sh
+uname -m
+```
+
+For the tested ARM64 device it should report:
+
+```text
+aarch64
+```
+
+## Troubleshooting
+
+Check the installed binary:
+
+```sh
+file ~/.local/share/cereblix-termux/bin/cereblix-miner
+```
+
+Check the launcher configuration:
+
+```sh
+cat ~/.local/share/cereblix-termux/config/miner.env
+```
+
+If the miner needs to be rebuilt:
+
+```sh
+cd cereblix-termux
+./install.sh
+```
 
 ## Safety
 
-Only use this software on devices you own or are authorized to operate. Mining can produce substantial CPU load, heat and battery drain.
+Only use this software on devices you own or are authorized to operate. CPU mining can cause substantial heat, battery drain and performance reduction.
 
-Never put wallet seed phrases, passwords or API tokens into this repository.
+Never commit wallet seed phrases, passwords, private keys or API tokens.
