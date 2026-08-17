@@ -1,0 +1,12 @@
+# Local Termux build output
+bin/
+source/
+
+# Local/private configuration
+config/miner.env
+*.log
+
+# Editor/OS files
+.DS_Store
+.vscode/
+.idea/
