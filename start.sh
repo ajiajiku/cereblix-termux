@@ -12,5 +12,12 @@ fi
 [ -n "$CRB_ADDR" ] || { echo 'Wallet address wajib diisi.'; exit 1; }
 if [ -z "${THREADS:-}" ]; then THREADS="$(nproc 2>/dev/null || echo 1)"; fi
 NODE="${NODE:-https://cereblix.com/pool/api}"
-printf '\nStarting Cereblix miner\nNode    : %s\nThreads : %s\n\n' "$NODE" "$THREADS"
-exec "$BIN" -addr "$CRB_ADDR" -node "$NODE" -threads "$THREADS"
+printf 'Worker name (Enter = default): '
+read -r WORKER
+if [ -n "$WORKER" ]; then
+  WORKER_ADDR="${CRB_ADDR}.${WORKER}"
+else
+  WORKER_ADDR="$CRB_ADDR"
+fi
+printf '\nStarting Cereblix miner\nNode    : %s\nThreads : %s\nWorker  : %s\n\n' "$NODE" "$THREADS" "${WORKER:-default}"
+exec "$BIN" -addr "$WORKER_ADDR" -node "$NODE" -threads "$THREADS"
