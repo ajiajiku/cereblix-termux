@@ -1,23 +1,18 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -euo pipefail
 ROOT="$HOME/.local/share/cereblix-termux"
-BIN="$ROOT/bin/cereblix-miner"
-CFG="$ROOT/config/miner.env"
-[ -x "$BIN" ] || { echo "Miner belum terpasang. Jalankan install.sh lagi."; exit 1; }
+BIN="$ROOT/bin/cereblix-termux"
+CFG="$ROOT/config"
+[ -x "$BIN" ] || { echo "Belum terpasang. Jalankan ./install.sh terlebih dahulu."; exit 1; }
 [ -f "$CFG" ] && . "$CFG"
-if [ -z "${CRB_ADDR:-}" ]; then
+if [ -z "${CRB_WALLET:-}" ]; then
   printf 'CRB wallet address (crb1...): '
-  read -r CRB_ADDR
+  read -r CRB_WALLET
 fi
-[ -n "$CRB_ADDR" ] || { echo 'Wallet address wajib diisi.'; exit 1; }
-if [ -z "${THREADS:-}" ]; then THREADS="$(nproc 2>/dev/null || echo 1)"; fi
-NODE="${NODE:-https://cereblix.com/pool/api}"
-printf 'Worker name (Enter = default): '
-read -r WORKER
-if [ -n "$WORKER" ]; then
-  WORKER_ADDR="${CRB_ADDR}.${WORKER}"
-else
-  WORKER_ADDR="$CRB_ADDR"
-fi
-printf '\nStarting Cereblix miner\nNode    : %s\nThreads : %s\nWorker  : %s\n\n' "$NODE" "$THREADS" "${WORKER:-default}"
-exec "$BIN" -addr "$WORKER_ADDR" -node "$NODE" -threads "$THREADS"
+[ -n "$CRB_WALLET" ] || { echo 'Wallet wajib diisi.'; exit 1; }
+CRB_WORKER="${CRB_WORKER:-HP1}"
+CRB_THREADS="${CRB_THREADS:-0}"
+CRB_POOL_HOST="${CRB_POOL_HOST:-stratum.cereblix.com}"
+CRB_POOL_PORT="${CRB_POOL_PORT:-3333}"
+export CRB_WALLET CRB_WORKER CRB_THREADS CRB_POOL_HOST CRB_POOL_PORT
+exec "$BIN" "$CRB_WALLET" "$CRB_WORKER" "$CRB_THREADS"
