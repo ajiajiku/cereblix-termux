@@ -37,11 +37,11 @@ static int tcp_connect(const char *host, int port) {
 static int send_json(int fd, const char *s) {
     size_t n = strlen(s), off = 0;
     while (off < n) {
-        ssize_t w = send(fd, s + off, n - off, 0);
+        ssize_t w = send(fd, s + off, n - off, MSG_NOSIGNAL);
         if (w <= 0) return -1;
         off += (size_t)w;
     }
-    return send(fd, "\n", 1, 0) == 1 ? 0 : -1;
+    return send(fd, "\n", 1, MSG_NOSIGNAL) == 1 ? 0 : -1;
 }
 
 static int json_string(const char *json, const char *key, char *out, size_t cap) {
@@ -63,6 +63,19 @@ static int json_string(const char *json, const char *key, char *out, size_t cap)
     }
     out[n] = 0;
     return *p == '\"';
+}
+
+/* Read a string key from a specific JSON object region. For login replies we
+ * must read result.id, not the top-level request id. */
+static int json_object_string(const char *json, const char *object_key,
+                              const char *key, char *out, size_t cap) {
+    char pat[96];
+    snprintf(pat, sizeof pat, "\"%s\"", object_key);
+    const char *p = strstr(json, pat);
+    if (!p) return 0;
+    p = strchr(p + strlen(pat), '{');
+    if (!p) return 0;
+    return json_string(p, key, out, cap);
 }
 
 static unsigned long long json_u64(const char *json, const char *key) {
@@ -171,8 +184,8 @@ int main(int argc, char **argv) {
 
         char login[1024];
         snprintf(login, sizeof login,
-            "{\"id\":%llu,\"jsonrpc\":\"2.0\",\"method\":\"login\",\"params\":{\"login\":\"%s\",\"pass\":\"x\",\"agent\":\"nmminer-termux/1.0\",\"rigid\":\"%s\"}}",
-            msgid++, wallet, worker);
+            "{\"id\":%llu,\"jsonrpc\":\"2.0\",\"method\":\"login\",\"params\":{\"login\":\"%s\",\"pass\":\"x\",\"agent\":\"nmminer-android/2.0\",\"rigid\":\"nmminer-termux\"}}",
+            msgid++, wallet);
         if (send_json(fd, login) < 0) { close(fd); sleep(2); continue; }
 
         char session[256] = "";
@@ -213,12 +226,24 @@ int main(int argc, char **argv) {
                         }
                     }
 
-                    char sid[256];
-                    if (!session[0] && json_string(msg, "id", sid, sizeof sid))
-                        snprintf(session, sizeof session, "%s", sid);
+                    /* Critical: the login session is result.id. The old wrapper
+                     * accidentally captured the top-level JSON-RPC request id,
+                     * which made every submit use "1" as the session and caused
+                     * every share to be rejected. */
+                    if (!session[0]) {
+                        char sid[256];
+                        if (json_object_string(msg, "result", "id", sid, sizeof sid)) {
+                            snprintf(session, sizeof session, "%s", sid);
+                            fprintf(stderr, "Pool session established.\n");
+                        }
+                    }
+
                     if (strstr(msg, "\"status\":\"OK\"") || strstr(msg, "\"status\": \"OK\"")) {
                         ++accepted;
                         printf("share accepted (%llu)\n", accepted); fflush(stdout);
+                    }
+                    if (strstr(msg, "\"error\"")) {
+                        fprintf(stderr, "pool error: %s\n", msg);
                     }
                 }
             } else if (r < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
@@ -234,6 +259,10 @@ int main(int argc, char **argv) {
                 hh[64] = 0;
                 for (int k = 0; k < 8; ++k) sprintf(nonce_hex + 2 * k, "%02x", (unsigned)((nonce >> (8 * k)) & 255u));
                 nonce_hex[16] = 0;
+                if (!session[0]) {
+                    fprintf(stderr, "share ready but pool session is not established; waiting.\n");
+                    continue;
+                }
                 char submit[1024];
                 snprintf(submit, sizeof submit,
                     "{\"id\":%llu,\"jsonrpc\":\"2.0\",\"method\":\"submit\",\"params\":{\"id\":\"%s\",\"job_id\":\"%s\",\"nonce\":\"%s\",\"result\":\"%s\"}}",
