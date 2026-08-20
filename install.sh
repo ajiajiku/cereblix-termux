@@ -6,7 +6,6 @@ ROOT="$HOME/.local/share/$APP_NAME"
 BIN="$ROOT/bin"
 CONFIG="$ROOT/config"
 SRC="$ROOT/source"
-XMRIG_SRC="$ROOT/xmrig-source"
 
 log() { printf '[%s] %s\n' "$1" "$2"; }
 fail() { log ERROR "$1"; exit 1; }
@@ -45,21 +44,23 @@ mkdir -p "$BIN" "$CONFIG"
 
 log INFO "Installing build dependencies..."
 pkg update -y
-pkg install -y git golang clang cmake make curl tar gzip
+pkg install -y git golang clang curl
 
 command -v git >/dev/null 2>&1 || fail "git belum tersedia."
 command -v go >/dev/null 2>&1 || fail "Go belum tersedia."
 command -v clang >/dev/null 2>&1 || fail "clang belum tersedia."
-command -v cmake >/dev/null 2>&1 || fail "cmake belum tersedia."
 command -v curl >/dev/null 2>&1 || fail "curl belum tersedia."
 
 GO_VERSION="$(go version 2>/dev/null || true)"
 log INFO "Go          : ${GO_VERSION:-unknown}"
 
+# The official Cereblix XMRig builds are Stratum/x86-oriented. The ARM64
+# Android path here deliberately uses the upstream Go HTTP/getwork miner,
+# which is the supported legacy protocol for ARM phones.
 if [ -d "$SRC/.git" ]; then
   log INFO "Updating Cereblix source..."
-  git -C "$SRC" fetch --depth=1 origin tag xmrig
-  git -C "$SRC" checkout -q -f tags/xmrig
+  git -C "$SRC" fetch --depth=1 origin xmrig
+  git -C "$SRC" checkout -q -f FETCH_HEAD
 else
   log INFO "Cloning Cereblix source..."
   rm -rf "$SRC"
@@ -68,71 +69,18 @@ fi
 
 HTTP_OUT="$BIN/cereblix-miner"
 cd "$SRC"
-log INFO "Building Android ARM HTTP miner fallback ($GOARCH)..."
+log INFO "Building Cereblix HTTP miner for Android/$GOARCH..."
 CGO_ENABLED=0 GOOS=android GOARCH="$GOARCH" GOTOOLCHAIN=local \
   go build -trimpath -ldflags='-s -w' -o "$HTTP_OUT" ./cmd/cereblix-miner
 chmod 700 "$HTTP_OUT"
 
-STRATUM_OUT="$BIN/cereblix-stratum-miner"
-TARBALL="$ROOT/xmrig-cereblix-src.tar.gz"
-rm -f "$TARBALL"
-rm -rf "$XMRIG_SRC"
-mkdir -p "$XMRIG_SRC"
-
-log INFO "Downloading official Cereblix XMRig source..."
-if curl -fL --retry 3 --connect-timeout 15 \
-    -o "$TARBALL" \
-    https://cereblix.com/xmrig-cereblix-src.tar.gz; then
-  if tar -xzf "$TARBALL" -C "$XMRIG_SRC"; then
-    XROOT="$(find "$XMRIG_SRC" -maxdepth 3 -name CMakeLists.txt -print -quit | sed 's#/CMakeLists.txt$##')"
-    if [ -n "$XROOT" ] && [ -f "$XROOT/CMakeLists.txt" ]; then
-      BUILD="$XROOT/.termux-build"
-      rm -rf "$BUILD"
-      log INFO "Building official Cereblix XMRig for Termux/Android ARM..."
-      export CC=clang
-      export CXX=clang++
-      if cmake -S "$XROOT" -B "$BUILD" \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_C_COMPILER=clang \
-          -DCMAKE_CXX_COMPILER=clang++ \
-          -DWITH_HWLOC=OFF \
-          -DWITH_OPENCL=OFF \
-          -DWITH_CUDA=OFF \
-          -DWITH_TLS=OFF \
-          -DWITH_HTTP=OFF \
-          -DWITH_MSR=OFF \
-          -DWITH_DMI=OFF \
-          -DWITH_BENCHMARK=OFF; then
-        if cmake --build "$BUILD" --parallel "$(nproc 2>/dev/null || echo 2)"; then
-          if [ -x "$BUILD/xmrig" ]; then
-            cp "$BUILD/xmrig" "$STRATUM_OUT"
-            chmod 700 "$STRATUM_OUT"
-            log OK "Stratum ARM miner built successfully."
-          else
-            warn "Build selesai tetapi binary xmrig tidak ditemukan. HTTP fallback tetap tersedia."
-          fi
-        else
-          warn "XMRig build gagal pada perangkat ini. HTTP fallback tetap tersedia."
-        fi
-      else
-        warn "XMRig CMake configuration gagal. HTTP fallback tetap tersedia."
-      fi
-    else
-      warn "CMakeLists.txt tidak ditemukan dalam source XMRig. HTTP fallback tetap tersedia."
-    fi
-  else
-    warn "Source archive tidak dapat diekstrak. HTTP fallback tetap tersedia."
-  fi
-else
-  warn "Source XMRig tidak dapat diunduh. HTTP fallback tetap tersedia."
-fi
+[ -x "$HTTP_OUT" ] || fail "Binary cereblix-miner gagal dibuat."
+log OK "ARM HTTP miner built successfully."
 
 if [ ! -f "$CONFIG/miner.env" ]; then
   cat > "$CONFIG/miner.env" <<'EOF'
 # Cereblix Termux configuration
-# Keep this file private if it contains a wallet address.
 CRB_ADDR=""
-STRATUM_NODE="stratum.cereblix.com:3333"
 NODE="https://cereblix.com/pool/api"
 THREADS=""
 EOF
@@ -143,8 +91,7 @@ cat > "$ROOT/start.sh" <<'EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 set -euo pipefail
 ROOT="$HOME/.local/share/cereblix-termux"
-STRATUM_BIN="$ROOT/bin/cereblix-stratum-miner"
-HTTP_BIN="$ROOT/bin/cereblix-miner"
+BIN="$ROOT/bin/cereblix-miner"
 CFG="$ROOT/config/miner.env"
 [ -f "$CFG" ] && . "$CFG"
 
@@ -153,25 +100,23 @@ if [ -z "${CRB_ADDR:-}" ]; then
   read -r CRB_ADDR
 fi
 [ -n "$CRB_ADDR" ] || { echo 'Wallet address wajib diisi.'; exit 1; }
-if [ -z "${THREADS:-}" ]; then THREADS="$(nproc 2>/dev/null || echo 1)"; fi
 
-if [ -x "$STRATUM_BIN" ]; then
-  NODE="${STRATUM_NODE:-stratum.cereblix.com:3333}"
-  printf '\nStarting Cereblix Stratum miner\nPool    : %s\nThreads : %s\n\n' "$NODE" "$THREADS"
-  exec "$STRATUM_BIN" -a nm/1 -o "$NODE" -u "$CRB_ADDR" -p x -t "$THREADS" -k
+NODE="${NODE:-https://cereblix.com/pool/api}"
+THREADS="${THREADS:-$(nproc 2>/dev/null || echo 1)}"
+
+printf '\nTesting Cereblix pool connection...\n'
+TEST_URL="$NODE/getwork?addr=$CRB_ADDR"
+HTTP_CODE="$(curl -L -sS --max-time 15 -o /dev/null -w '%{http_code}' "$TEST_URL" || true)"
+printf 'Pool HTTP status : %s\n' "${HTTP_CODE:-unknown}"
+if [ "${HTTP_CODE:-0}" != "200" ]; then
+  echo 'Pool belum memberikan work. Periksa koneksi atau jalankan lagi nanti.'
+  exit 1
 fi
 
-[ -x "$HTTP_BIN" ] || { echo 'Miner belum terpasang. Jalankan install.sh lagi.'; exit 1; }
-NODE="${NODE:-https://cereblix.com/pool/api}"
-printf '\nStarting Cereblix HTTP miner (fallback)\nNode    : %s\nThreads : %s\n\n' "$NODE" "$THREADS"
-exec "$HTTP_BIN" -addr "$CRB_ADDR" -node "$NODE" -threads "$THREADS"
+printf '\nStarting Cereblix ARM HTTP miner\nNode    : %s\nThreads : %s\nAddress : %s\n\n' "$NODE" "$THREADS" "$CRB_ADDR"
+exec "$BIN" -addr "$CRB_ADDR" -node "$NODE" -threads "$THREADS"
 EOF
 chmod 700 "$ROOT/start.sh"
 
 log OK "Installation complete."
-if [ -x "$STRATUM_OUT" ]; then
-  log OK "Stratum ARM miner is ready."
-else
-  log WARN "Stratum ARM miner was not built; HTTP fallback is ready."
-fi
 log INFO "Run: $ROOT/start.sh"
