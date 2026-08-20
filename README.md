@@ -4,33 +4,31 @@ Termux tooling for building and running the open-source Cereblix CPU miner on An
 
 ## Status
 
-**ARM64 / aarch64 has been successfully tested on a real Termux device.** The miner connected to `https://cereblix.com/pool/api` and received an accepted share during testing.
+**ARM64 / aarch64 has been tested on a real Termux device.** The project builds an Android-native HTTP miner and now also attempts to build the Cereblix XMRig fork for the pool's Stratum endpoint.
 
-The project is still experimental. ARMv7/32-bit validation and release binaries are not yet complete.
+The launcher prefers the ARM Stratum miner when the build succeeds and automatically falls back to the Android HTTP miner if Stratum cannot be built on the device.
 
 ## What this project does
 
 - Detects Android API level and CPU architecture.
 - Requires Android API 24 or newer (Android 7.0+).
-- Installs the required Termux build dependencies.
+- Installs Termux build dependencies.
 - Clones the upstream Cereblix `xmrig` branch.
-- Builds `cereblix-miner` locally for the device architecture.
+- Builds an Android ARM HTTP miner.
+- Attempts an ARM Stratum build using CMake/Clang.
 - Creates a persistent private configuration file.
-- Provides a simple `start.sh` launcher.
+- Provides a `start.sh` launcher that prefers Stratum and falls back to HTTP.
 
 This repository does **not** redistribute the original Cereblix APK or `libnmminer.so`.
-
-Upstream source:
-
-- https://github.com/CereblixCRB/cereblix
 
 ## Requirements
 
 - Android 7.0 / API 24 or newer.
 - Termux with a working package repository.
-- ARM64 (`arm64-v8a`) is the primary tested target.
-- ARMv7 (`armeabi-v7a`) is accepted by the installer, but is not yet fully validated.
+- ARM64 (`arm64-v8a`) is the primary target.
+- ARMv7 (`armeabi-v7a`) is accepted by the architecture check but is not fully validated.
 - Go 1.21 or newer.
+- For the Stratum build: clang, cmake, make and libuv.
 
 ## Install
 
@@ -41,15 +39,13 @@ chmod +x install.sh
 ./install.sh
 ```
 
-The installer checks Android API, ABI and the Termux CPU architecture. It then builds the miner with `GOOS=android` and the detected `GOARCH`, rather than using an incompatible desktop binary.
-
 After installation:
 
 ```sh
 ~/.local/share/cereblix-termux/start.sh
 ```
 
-The launcher asks for the CRB wallet address if one has not been configured, then starts the miner using the detected CPU thread count.
+The launcher asks for the CRB wallet address if it has not been configured. If the ARM Stratum binary was built successfully, it uses `stratum.cereblix.com:3333`; otherwise it uses the HTTP pool endpoint.
 
 ## Configuration
 
@@ -63,6 +59,7 @@ Example:
 
 ```sh
 CRB_ADDR="crb1..."
+STRATUM_NODE="stratum.cereblix.com:3333"
 NODE="https://cereblix.com/pool/api"
 THREADS="7"
 ```
@@ -71,15 +68,15 @@ THREADS="7"
 
 ## Important: architecture
 
-Do not download and run the upstream `linux-amd64` binary on an Android ARM phone. This project builds the miner locally as an Android binary so the executable matches the Termux device architecture.
+Do not download and run the upstream `linux-amd64` binary on an Android ARM phone. The installer builds native Android/ARM binaries locally.
 
-You can verify the device architecture with:
+Verify the device architecture with:
 
 ```sh
 uname -m
 ```
 
-For an ARM64 device it should report:
+An ARM64 device should report:
 
 ```text
 aarch64
@@ -87,22 +84,19 @@ aarch64
 
 ## Troubleshooting
 
-Check the installed binary:
+Check which miners were built:
 
 ```sh
-file ~/.local/share/cereblix-termux/bin/cereblix-miner
+ls -l ~/.local/share/cereblix-termux/bin/
 ```
 
-Check the launcher configuration:
+If `cereblix-stratum-miner` exists and is executable, the launcher will prefer it.
+
+To rebuild:
 
 ```sh
-cat ~/.local/share/cereblix-termux/config/miner.env
-```
-
-If the miner needs to be rebuilt:
-
-```sh
-cd cereblix-termux
+cd ~/cereblix-termux
+git pull
 ./install.sh
 ```
 
