@@ -41,8 +41,6 @@ static int hexbuf(const char *s, uint8_t *o, int cap) {
     return (int)(n / 2);
 }
 
-/* Small JSON helpers are sufficient here because the pool protocol is line-based
- * and the fields we consume are simple strings/numbers. */
 static int json_str(const char *j, const char *k, char *out, size_t cap) {
     char pat[96];
     snprintf(pat, sizeof pat, "\"%s\"", k);
@@ -136,7 +134,9 @@ static void *submit_loop(void *x) {
         uint8_t hash[32];
         while (nm_engine_poll_share(jid, sizeof jid, &nonce, hash)) {
             for (int i = 0; i < 32; i++) snprintf(hh + 2 * i, 3, "%02x", hash[i]);
+            hh[64] = 0;
             for (int i = 0; i < 8; i++) snprintf(nh + 2 * i, 3, "%02x", (unsigned)((nonce >> (8 * i)) & 255));
+            nh[16] = 0;
             char m[768];
             snprintf(m, sizeof m,
                      "{\"id\":%u,\"jsonrpc\":\"2.0\",\"method\":\"submit\",\"params\":{\"id\":\"%s\",\"job_id\":\"%s\",\"nonce\":\"%s\",\"result\":\"%s\"}}",
@@ -152,10 +152,11 @@ static void *submit_loop(void *x) {
 }
 
 static void handle_line(char *l) {
-    /* Login response: session id lives inside result.id, not the top-level numeric id. */
+    /* Login response contains result.id (session) and result.job. Server-pushed
+     * job messages have params.job fields and no result.id. */
+    const char *res = strstr(l, "\"result\"");
     if (strstr(l, "\"job\"")) {
         apply_job(l);
-        const char *res = strstr(l, "\"result\"");
         if (res) {
             char sid[128];
             if (json_str(res, "id", sid, sizeof sid))
@@ -165,7 +166,10 @@ static void handle_line(char *l) {
 
     if (strstr(l, "\"error\"")) {
         rejected++;
-        fprintf(stderr, "\nshare rejected: %llu\n", rejected);
+        /* Do not hide the pool's reason. This is essential when diagnosing a
+         * rejected nonce/result, because a count alone cannot distinguish a
+         * stale job, bad nonce encoding, wrong result hash, or pool policy. */
+        fprintf(stderr, "\nPOOL ERROR: %s\n", l);
     } else if (strstr(l, "\"status\":\"OK\"")) {
         accepted++;
         fprintf(stderr, "\nshare accepted: %llu\n", accepted);
