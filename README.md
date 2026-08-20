@@ -1,34 +1,35 @@
-# cereblix-termux
+# Cereblix Termux — APK v2.0-derived
 
-Termux tooling for building and running the open-source Cereblix CPU miner on Android devices.
+This project ports the **native NeuroMorph mining engine and Stratum contract used by the Cereblix Android miner v2.0** into a standalone Termux program. It is not the old HTTP/getwork experiment and it does not use the Linux-amd64 miner updater.
 
-## Status
+## Goal
 
-**ARM64 / aarch64 has been tested on a real Termux device.** The project builds an Android-native HTTP miner and now also attempts to build the Cereblix XMRig fork for the pool's Stratum endpoint.
+Run the same core mining path on Android 7+ / API 24+:
 
-The launcher prefers the ARM Stratum miner when the build succeeds and automatically falls back to the Android HTTP miner if Stratum cannot be built on the device.
+- NeuroMorph native C engine from the Android miner source
+- Stratum login/job/submit flow used by `StratumClient.kt`
+- Custom wallet address
+- Custom worker/rig name
+- Configurable CPU threads
+- ARM64 and ARMv7 builds
 
-## What this project does
+The upstream Android project currently declares a higher Android app `minSdk`, so this repository deliberately removes the Android UI/Service/JNI layer and keeps the native engine + Stratum protocol for Termux.
 
-- Detects Android API level and CPU architecture.
-- Requires Android API 24 or newer (Android 7.0+).
-- Installs Termux build dependencies.
-- Clones the upstream Cereblix `xmrig` branch.
-- Builds an Android ARM HTTP miner.
-- Attempts an ARM Stratum build using CMake/Clang.
-- Creates a persistent private configuration file.
-- Provides a `start.sh` launcher that prefers Stratum and falls back to HTTP.
+## Source alignment
 
-This repository does **not** redistribute the original Cereblix APK or `libnmminer.so`.
+The native sources are fetched from the Cereblix Android miner commit:
+
+`9a05f8968be0507798561930c795bce80d4e8d8a`
+
+The Termux network bridge follows the Android app's `StratumClient` contract: `login`, server `job`, `keepalived`, and `submit`. The native engine API mirrors the APK's `nm_engine` interface.
 
 ## Requirements
 
-- Android 7.0 / API 24 or newer.
-- Termux with a working package repository.
-- ARM64 (`arm64-v8a`) is the primary target.
-- ARMv7 (`armeabi-v7a`) is accepted by the architecture check but is not fully validated.
-- Go 1.21 or newer.
-- For the Stratum build: clang, cmake, make and libuv.
+- Android 7.0 / API 24 or newer
+- Termux
+- ARM64 (`arm64-v8a`) or ARMv7 (`armeabi-v7a`)
+- Working network connection
+- Sufficient free RAM; NeuroMorph uses a large dataset/scratch memory footprint
 
 ## Install
 
@@ -39,69 +40,60 @@ chmod +x install.sh
 ./install.sh
 ```
 
-After installation:
-
-```sh
-~/.local/share/cereblix-termux/start.sh
-```
-
-The launcher asks for the CRB wallet address if it has not been configured. If the ARM Stratum binary was built successfully, it uses `stratum.cereblix.com:3333`; otherwise it uses the HTTP pool endpoint.
-
-## Configuration
-
-The private configuration is stored at:
+The installer downloads the matching native sources, compiles them with Termux Clang for the phone's ABI, and creates:
 
 ```text
-~/.local/share/cereblix-termux/config/miner.env
+~/.local/share/cereblix-termux/bin/cereblix-termux
+~/.local/share/cereblix-termux/start.sh
+~/.local/share/cereblix-termux/config
+```
+
+## Configure worker name
+
+Edit:
+
+```sh
+nano ~/.local/share/cereblix-termux/config
 ```
 
 Example:
 
 ```sh
-CRB_ADDR="crb1..."
-STRATUM_NODE="stratum.cereblix.com:3333"
-NODE="https://cereblix.com/pool/api"
-THREADS="7"
+CRB_WALLET="crb1..."
+CRB_WORKER="HP1"
+CRB_THREADS="4"
+CRB_POOL_HOST="stratum.cereblix.com"
+CRB_POOL_PORT="3333"
 ```
 
-`install.sh` will not overwrite an existing `miner.env` during reinstall.
+`CRB_WORKER` can be any worker name accepted by the pool. It is sent as the Stratum `rigid` value, matching the Android v2.0 client.
 
-## Important: architecture
-
-Do not download and run the upstream `linux-amd64` binary on an Android ARM phone. The installer builds native Android/ARM binaries locally.
-
-Verify the device architecture with:
+## Start
 
 ```sh
-uname -m
+~/.local/share/cereblix-termux/start.sh
 ```
 
-An ARM64 device should report:
-
-```text
-aarch64
-```
-
-## Troubleshooting
-
-Check which miners were built:
+Or provide the values directly:
 
 ```sh
-ls -l ~/.local/share/cereblix-termux/bin/
+~/.local/share/cereblix-termux/bin/cereblix-termux "crb1..." "HP1" 4
 ```
 
-If `cereblix-stratum-miner` exists and is executable, the launcher will prefer it.
+## Validation
 
-To rebuild:
+The program runs the native engine self-test before mining. A successful run must show the self-test passing, a Stratum connection, a job, and then a live hash counter. A pool-accepted share is the final network validation.
 
-```sh
-cd ~/cereblix-termux
-git pull
-./install.sh
-```
+**Do not treat a displayed hashrate alone as proof of correctness.**
 
-## Safety
+## Architecture note
 
-Only use this software on devices you own or are authorized to operate. CPU mining can cause substantial heat, battery drain and performance reduction.
+Do not use a `linux-amd64` release binary on an ARM Android phone. This project compiles the native C engine locally for the phone's ARM ABI.
 
-Never commit wallet seed phrases, passwords, private keys or API tokens.
+## Status
+
+The repository has been reset from the earlier experimental HTTP/Go approach. The remaining validation step is to compile and run this exact source on the target Android 7/ARM device and confirm a pool-accepted share.
+
+## License / source
+
+The upstream source remains owned/licensed by its original project. This repository contains only the Termux bridge and build orchestration; the installer fetches the upstream native sources at a pinned commit.
