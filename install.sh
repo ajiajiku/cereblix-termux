@@ -10,20 +10,32 @@ log() { printf '[%s] %s\n' "$1" "$2"; }
 fail() { log ERROR "$1"; exit 1; }
 
 command -v getprop >/dev/null 2>&1 || fail "getprop tidak ditemukan. Jalankan script ini di Android/Termux."
+command -v uname >/dev/null 2>&1 || fail "uname tidak ditemukan."
 SDK="$(getprop ro.build.version.sdk 2>/dev/null || true)"
 ABI="$(getprop ro.product.cpu.abi 2>/dev/null || true)"
 ABI_LIST="$(getprop ro.product.cpu.abilist 2>/dev/null || true)"
+MACHINE="$(uname -m 2>/dev/null || true)"
 [ -n "$SDK" ] || fail "Tidak dapat membaca Android API level."
 [ "$SDK" -ge 24 ] || fail "Android API $SDK terdeteksi. Minimum yang didukung adalah API 24 (Android 7.0)."
+
 case "$ABI" in
   arm64-v8a|armeabi-v7a|armeabi) : ;;
-  *) fail "ABI utama '$ABI' belum didukung. ABI list: $ABI_LIST" ;;
+  *) fail "ABI utama '$ABI' belum didukung. ABI list: ${ABI_LIST:-unknown}" ;;
 esac
+
+case "$MACHINE" in
+  aarch64|arm64) GOARCH="arm64" ;;
+  armv7l|armv8l|arm) GOARCH="arm" ;;
+  *) fail "Arsitektur Termux '$MACHINE' belum didukung. Gunakan ARM64 atau ARMv7." ;;
+esac
+
 [ -n "${PREFIX:-}" ] && [ -d "$PREFIX" ] || fail "Environment Termux tidak terdeteksi."
 
 log INFO "Android API : $SDK"
 log INFO "ABI utama   : $ABI"
 log INFO "ABI list    : ${ABI_LIST:-unknown}"
+log INFO "CPU         : $MACHINE"
+log INFO "Go ARCH     : $GOARCH"
 log INFO "Termux      : $PREFIX"
 
 mkdir -p "$BIN" "$CONFIG"
@@ -57,8 +69,11 @@ fi
 
 cd "$SRC"
 OUT="$BIN/cereblix-miner"
-log INFO "Building upstream cereblix-miner for the current Termux architecture..."
-CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o "$OUT" ./cmd/cereblix-miner
+log INFO "Building Cereblix miner for Android/Termux ($GOARCH)..."
+# Force the target architecture so the produced binary always matches this phone.
+# CGO is disabled to avoid requiring a native C toolchain on Android 7.
+CGO_ENABLED=0 GOOS=android GOARCH="$GOARCH" GOTOOLCHAIN=local \
+  go build -trimpath -ldflags='-s -w' -o "$OUT" ./cmd/cereblix-miner
 chmod 700 "$OUT"
 
 # Do not overwrite an existing wallet/configuration on reinstall.
@@ -70,6 +85,7 @@ CRB_ADDR=""
 NODE="https://cereblix.com/pool/api"
 THREADS=""
 EOF
+  chmod 600 "$CONFIG/miner.env"
 fi
 
 cat > "$ROOT/start.sh" <<'EOF'
