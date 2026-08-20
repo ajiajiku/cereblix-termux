@@ -1,9 +1,11 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -euo pipefail
 
+PROJECT="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 ROOT="$HOME/.local/share/cereblix-termux"
 BIN="$ROOT/bin"
 SRC="$ROOT/upstream"
+WRAPPER="$PROJECT/src/cereblix_termux.c"
 mkdir -p "$BIN"
 
 command -v getprop >/dev/null 2>&1 || { echo "Jalankan script ini di Termux Android."; exit 1; }
@@ -16,12 +18,11 @@ case "$ABI:$MACHINE" in
   armeabi-v7a:armv7l|armeabi-v7a:armv8l|armeabi:arm*) CFLAGS="-O3 -mfpu=neon" ;;
   *) echo "Arsitektur tidak didukung: ABI=$ABI CPU=$MACHINE"; exit 1 ;;
 esac
+[ -f "$WRAPPER" ] || { echo "Wrapper proyek tidak ditemukan: $WRAPPER"; exit 1; }
 
 printf 'Android API : %s\nABI         : %s\nCPU         : %s\n' "$SDK" "$ABI" "$MACHINE"
-
-echo "Installing build tools..."
 pkg update -y
-pkg install -y git clang make
+pkg install -y git clang
 
 if [ ! -d "$SRC/.git" ]; then
   rm -rf "$SRC"
@@ -37,19 +38,14 @@ for f in nm_engine.c nm_engine.h nm_fast.c nm_fast.h nm_neuromorph.c nm_neuromor
 done
 
 # The Android engine is pure C. We reuse it directly and replace only the JNI
-# layer with the small Termux Stratum frontend in this repository.
+# layer with the Termux Stratum frontend in this repository.
 clang $CFLAGS -ffp-contract=off -fno-vectorize -fno-slp-vectorize \
   -fno-exceptions -fomit-frame-pointer -funroll-loops -pthread \
-  -I"$CPP" \
-  "$ROOT/../cereblix-termux/src/cereblix_termux.c" \
+  -I"$CPP" "$WRAPPER" \
   "$CPP/nm_engine.c" "$CPP/nm_fast.c" "$CPP/nm_neuromorph.c" "$CPP/nm_params.c" \
   -o "$BIN/cereblix-termux" -pthread -lm -latomic
-
 chmod 700 "$BIN/cereblix-termux"
-
-if ! "$BIN/cereblix-termux" --help >/dev/null; then
-  echo "Binary self-check failed."; exit 1
-fi
+"$BIN/cereblix-termux" --help >/dev/null
 
 cat > "$ROOT/start.sh" <<'EOF'
 #!/data/data/com.termux/files/usr/bin/bash
@@ -57,7 +53,6 @@ set -euo pipefail
 ROOT="$HOME/.local/share/cereblix-termux"
 BIN="$ROOT/bin/cereblix-termux"
 [ -x "$BIN" ] || { echo "Miner belum terpasang. Jalankan install.sh terlebih dahulu."; exit 1; }
-
 printf 'CRB wallet address (crb1...): '
 read -r WALLET
 [ -n "$WALLET" ] || { echo 'Wallet wajib diisi.'; exit 1; }
@@ -66,13 +61,10 @@ read -r WORKER
 WORKER="${WORKER:-HP1}"
 printf 'Threads (kosong = otomatis): '
 read -r THREADS
-
 ARGS=(-o stratum+tcp://stratum.cereblix.com:3333 -u "$WALLET" -w "$WORKER")
 [ -n "$THREADS" ] && ARGS+=(-t "$THREADS")
 exec "$BIN" "${ARGS[@]}"
 EOF
 chmod 700 "$ROOT/start.sh"
-
-echo
 echo "INSTALL OK"
-echo "Start with: $ROOT/start.sh"
+echo "Start: $ROOT/start.sh"
