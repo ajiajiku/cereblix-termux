@@ -4,119 +4,86 @@ set -euo pipefail
 APP_NAME="cereblix-termux"
 ROOT="$HOME/.local/share/$APP_NAME"
 BIN="$ROOT/bin"
-CONFIG="$ROOT/config"
 SRC="$ROOT/source"
+REF="9a05f8968be0507798561930c795bce80d4e8d8a"
+BASE="https://raw.githubusercontent.com/CereblixCRB/cereblix-miner/$REF/android/app/src/main/cpp"
 
-log() { printf '[%s] %s\n' "$1" "$2"; }
-fail() { log ERROR "$1"; exit 1; }
-warn() { log WARN "$1"; }
+fail(){ printf '[ERROR] %s\n' "$1" >&2; exit 1; }
+log(){ printf '[%s] %s\n' "$1" "$2"; }
 
-command -v getprop >/dev/null 2>&1 || fail "getprop tidak ditemukan. Jalankan script ini di Android/Termux."
-command -v uname >/dev/null 2>&1 || fail "uname tidak ditemukan."
+command -v getprop >/dev/null || fail "Jalankan script ini di Termux Android."
 SDK="$(getprop ro.build.version.sdk 2>/dev/null || true)"
 ABI="$(getprop ro.product.cpu.abi 2>/dev/null || true)"
-ABI_LIST="$(getprop ro.product.cpu.abilist 2>/dev/null || true)"
 MACHINE="$(uname -m 2>/dev/null || true)"
-[ -n "$SDK" ] || fail "Tidak dapat membaca Android API level."
-[ "$SDK" -ge 24 ] || fail "Android API $SDK terdeteksi. Minimum yang didukung adalah API 24 (Android 7.0)."
-
-case "$ABI" in
-  arm64-v8a|armeabi-v7a|armeabi) : ;;
-  *) fail "ABI utama '$ABI' belum didukung. ABI list: ${ABI_LIST:-unknown}" ;;
-esac
-
-case "$MACHINE" in
-  aarch64|arm64) GOARCH="arm64" ;;
-  armv7l|armv8l|arm) GOARCH="arm" ;;
-  *) fail "Arsitektur Termux '$MACHINE' belum didukung. Gunakan ARM64 atau ARMv7." ;;
-esac
-
-[ -n "${PREFIX:-}" ] && [ -d "$PREFIX" ] || fail "Environment Termux tidak terdeteksi."
+[ -n "$SDK" ] || fail "Android API tidak terdeteksi."
+[ "$SDK" -ge 24 ] || fail "Android $SDK terdeteksi. Minimum API 24 (Android 7.0)."
+case "$ABI" in arm64-v8a|armeabi-v7a) ;; *) fail "ABI $ABI belum didukung. Gunakan ARM64 atau ARMv7.";; esac
+[ -n "${PREFIX:-}" ] && [ -d "$PREFIX" ] || fail "Termux tidak terdeteksi."
 
 log INFO "Android API : $SDK"
-log INFO "ABI utama   : $ABI"
-log INFO "ABI list    : ${ABI_LIST:-unknown}"
-log INFO "CPU         : $MACHINE"
-log INFO "Go ARCH     : $GOARCH"
-log INFO "Termux      : $PREFIX"
+log INFO "ABI         : $ABI"
+log INFO "Machine     : $MACHINE"
+log INFO "Source ref  : $REF"
 
-mkdir -p "$BIN" "$CONFIG"
-
-log INFO "Installing build dependencies..."
 pkg update -y
-pkg install -y git golang clang curl
+pkg install -y clang curl make
+mkdir -p "$SRC" "$BIN"
 
-command -v git >/dev/null 2>&1 || fail "git belum tersedia."
-command -v go >/dev/null 2>&1 || fail "Go belum tersedia."
-command -v clang >/dev/null 2>&1 || fail "clang belum tersedia."
-command -v curl >/dev/null 2>&1 || fail "curl belum tersedia."
+# These are the native NeuroMorph sources used by the v2.0 Android APK.
+for f in CMakeLists.txt nm_aes.h nm_engine.c nm_engine.h nm_fast.c nm_fast.h nm_jni.c nm_neuromorph.c nm_neuromorph.h nm_params.c nm_params.h nm_sha256.h; do
+  curl -fsSL "$BASE/$f" -o "$SRC/$f"
+done
 
-GO_VERSION="$(go version 2>/dev/null || true)"
-log INFO "Go          : ${GO_VERSION:-unknown}"
+# Standalone Termux network/Stratum bridge; it calls the same native engine API
+# exposed by the APK's JNI layer, without Android UI/Service dependencies.
+curl -fsSL "https://raw.githubusercontent.com/ajiajiku/cereblix-termux/main/src/termux_main.c" -o "$SRC/termux_main.c"
 
-# The official Cereblix XMRig builds are Stratum/x86-oriented. The ARM64
-# Android path here deliberately uses the upstream Go HTTP/getwork miner,
-# which is the supported legacy protocol for ARM phones.
-if [ -d "$SRC/.git" ]; then
-  log INFO "Updating Cereblix source..."
-  git -C "$SRC" fetch --depth=1 origin xmrig
-  git -C "$SRC" checkout -q -f FETCH_HEAD
-else
-  log INFO "Cloning Cereblix source..."
-  rm -rf "$SRC"
-  git clone --depth=1 --branch xmrig https://github.com/CereblixCRB/cereblix.git "$SRC"
-fi
-
-HTTP_OUT="$BIN/cereblix-miner"
 cd "$SRC"
-log INFO "Building Cereblix HTTP miner for Android/$GOARCH..."
-CGO_ENABLED=0 GOOS=android GOARCH="$GOARCH" GOTOOLCHAIN=local \
-  go build -trimpath -ldflags='-s -w' -o "$HTTP_OUT" ./cmd/cereblix-miner
-chmod 700 "$HTTP_OUT"
-
-[ -x "$HTTP_OUT" ] || fail "Binary cereblix-miner gagal dibuat."
-log OK "ARM HTTP miner built successfully."
-
-if [ ! -f "$CONFIG/miner.env" ]; then
-  cat > "$CONFIG/miner.env" <<'EOF'
-# Cereblix Termux configuration
-CRB_ADDR=""
-NODE="https://cereblix.com/pool/api"
-THREADS=""
-EOF
-  chmod 600 "$CONFIG/miner.env"
+CFLAGS="-O3 -ffp-contract=off -fno-vectorize -fno-slp-vectorize -fno-exceptions -fomit-frame-pointer -funroll-loops -pthread"
+if [ "$ABI" = "arm64-v8a" ]; then
+  CFLAGS="$CFLAGS -march=armv8-a+crypto+simd"
+elif [ "$ABI" = "armeabi-v7a" ]; then
+  CFLAGS="$CFLAGS -mfpu=neon"
 fi
+
+log INFO "Compiling APK-derived NeuroMorph engine..."
+clang $CFLAGS -o "$BIN/cereblix-termux" termux_main.c nm_engine.c nm_fast.c nm_neuromorph.c nm_params.c -lm -pthread
+chmod 700 "$BIN/cereblix-termux"
+
+"$BIN/cereblix-termux" --version >/dev/null 2>&1 || true
+
+cat > "$ROOT/config" <<'EOF'
+# Wallet, worker and threads can be changed here.
+CRB_WALLET=""
+CRB_WORKER="HP1"
+CRB_THREADS=""
+CRB_POOL_HOST="stratum.cereblix.com"
+CRB_POOL_PORT="3333"
+EOF
+chmod 600 "$ROOT/config"
 
 cat > "$ROOT/start.sh" <<'EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 set -euo pipefail
 ROOT="$HOME/.local/share/cereblix-termux"
-BIN="$ROOT/bin/cereblix-miner"
-CFG="$ROOT/config/miner.env"
+BIN="$ROOT/bin/cereblix-termux"
+CFG="$ROOT/config"
 [ -f "$CFG" ] && . "$CFG"
 
-if [ -z "${CRB_ADDR:-}" ]; then
+if [ -z "${CRB_WALLET:-}" ]; then
   printf 'CRB wallet address (crb1...): '
-  read -r CRB_ADDR
+  read -r CRB_WALLET
 fi
-[ -n "$CRB_ADDR" ] || { echo 'Wallet address wajib diisi.'; exit 1; }
-
-NODE="${NODE:-https://cereblix.com/pool/api}"
-THREADS="${THREADS:-$(nproc 2>/dev/null || echo 1)}"
-
-printf '\nTesting Cereblix pool connection...\n'
-TEST_URL="$NODE/getwork?addr=$CRB_ADDR"
-HTTP_CODE="$(curl -L -sS --max-time 15 -o /dev/null -w '%{http_code}' "$TEST_URL" || true)"
-printf 'Pool HTTP status : %s\n' "${HTTP_CODE:-unknown}"
-if [ "${HTTP_CODE:-0}" != "200" ]; then
-  echo 'Pool belum memberikan work. Periksa koneksi atau jalankan lagi nanti.'
-  exit 1
-fi
-
-printf '\nStarting Cereblix ARM HTTP miner\nNode    : %s\nThreads : %s\nAddress : %s\n\n' "$NODE" "$THREADS" "$CRB_ADDR"
-exec "$BIN" -addr "$CRB_ADDR" -node "$NODE" -threads "$THREADS"
+[ -n "$CRB_WALLET" ] || { echo 'Wallet wajib diisi.'; exit 1; }
+CRB_WORKER="${CRB_WORKER:-HP1}"
+CRB_POOL_HOST="${CRB_POOL_HOST:-stratum.cereblix.com}"
+CRB_POOL_PORT="${CRB_POOL_PORT:-3333}"
+CRB_THREADS="${CRB_THREADS:-0}"
+export CRB_WALLET CRB_WORKER CRB_POOL_HOST CRB_POOL_PORT CRB_THREADS
+exec "$BIN" "$CRB_WALLET" "$CRB_WORKER" "$CRB_THREADS"
 EOF
 chmod 700 "$ROOT/start.sh"
 
-log OK "Installation complete."
-log INFO "Run: $ROOT/start.sh"
+log OK "Installed APK-v2.0-derived Termux miner."
+log INFO "Start with: $ROOT/start.sh"
+log INFO "Worker name: edit $ROOT/config"
