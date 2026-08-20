@@ -25,6 +25,11 @@ log INFO "ABI         : $ABI"
 log INFO "Machine     : $MACHINE"
 log INFO "Source ref  : $REF"
 
+# Stop legacy miner processes from earlier repository versions before rebuilding.
+pkill -TERM -f 'cereblix-miner\.old' 2>/dev/null || true
+pkill -TERM -f '/cereblix-miner([[:space:]]|$)' 2>/dev/null || true
+sleep 1
+
 pkg update -y
 pkg install -y clang curl make
 mkdir -p "$SRC" "$BIN"
@@ -68,6 +73,7 @@ set -euo pipefail
 ROOT="$HOME/.local/share/cereblix-termux"
 BIN="$ROOT/bin/cereblix-termux"
 CFG="$ROOT/config"
+[ -x "$BIN" ] || { echo "Belum terpasang. Jalankan ./install.sh terlebih dahulu."; exit 1; }
 [ -f "$CFG" ] && . "$CFG"
 
 if [ -z "${CRB_WALLET:-}" ]; then
@@ -80,7 +86,20 @@ CRB_POOL_HOST="${CRB_POOL_HOST:-stratum.cereblix.com}"
 CRB_POOL_PORT="${CRB_POOL_PORT:-3333}"
 CRB_THREADS="${CRB_THREADS:-0}"
 export CRB_WALLET CRB_WORKER CRB_POOL_HOST CRB_POOL_PORT CRB_THREADS
-exec "$BIN" "$CRB_WALLET" "$CRB_WORKER" "$CRB_THREADS"
+
+# Keep the miner as a child so Ctrl+C/Ctrl+TERM is explicitly forwarded.
+"$BIN" "$CRB_WALLET" "$CRB_WORKER" "$CRB_THREADS" &
+PID=$!
+cleanup() {
+  kill -TERM "$PID" 2>/dev/null || true
+  wait "$PID" 2>/dev/null || true
+  exit 130
+}
+trap cleanup INT TERM
+wait "$PID"
+STATUS=$?
+trap - INT TERM
+exit "$STATUS"
 EOF
 chmod 700 "$ROOT/start.sh"
 
