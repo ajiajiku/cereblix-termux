@@ -46,12 +46,11 @@ fi
 
 SRC="$ROOT/source"
 if [ -d "$SRC/.git" ]; then
-  log INFO "Updating upstream source..."
-  git -C "$SRC" fetch --depth=1 origin xmrig
-  git -C "$SRC" checkout -q xmrig
-  git -C "$SRC" reset --hard -q xmrig
+  log INFO "Updating upstream source tag xmrig..."
+  git -C "$SRC" fetch --depth=1 origin tag xmrig
+  git -C "$SRC" checkout -q -f tags/xmrig
 else
-  log INFO "Cloning upstream Cereblix source..."
+  log INFO "Cloning upstream Cereblix source tag xmrig..."
   rm -rf "$SRC"
   git clone --depth=1 --branch xmrig https://github.com/CereblixCRB/cereblix.git "$SRC"
 fi
