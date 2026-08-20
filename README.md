@@ -10,7 +10,8 @@ The project is still experimental. ARMv7/32-bit validation and release binaries 
 
 ## What this project does
 
-- Detects Android API level and CPU ABI.
+- Detects Android API level and CPU architecture.
+- Requires Android API 24 or newer (Android 7.0+).
 - Installs the required Termux build dependencies.
 - Clones the upstream Cereblix `xmrig` branch.
 - Builds `cereblix-miner` locally for the device architecture.
@@ -28,6 +29,7 @@ Upstream source:
 - Android 7.0 / API 24 or newer.
 - Termux with a working package repository.
 - ARM64 (`arm64-v8a`) is the primary tested target.
+- ARMv7 (`armeabi-v7a`) is accepted by the installer, but is not yet fully validated.
 - Go 1.21 or newer.
 
 ## Install
@@ -38,6 +40,8 @@ cd cereblix-termux
 chmod +x install.sh
 ./install.sh
 ```
+
+The installer checks Android API, ABI and the Termux CPU architecture. It then builds the miner with `GOOS=android` and the detected `GOARCH`, rather than using an incompatible desktop binary.
 
 After installation:
 
@@ -67,7 +71,7 @@ THREADS="7"
 
 ## Important: architecture
 
-Do not download and run the upstream `linux-amd64` binary on an Android ARM64 phone. This project builds the miner locally so the executable matches the Termux device architecture.
+Do not download and run the upstream `linux-amd64` binary on an Android ARM phone. This project builds the miner locally as an Android binary so the executable matches the Termux device architecture.
 
 You can verify the device architecture with:
 
@@ -75,7 +79,7 @@ You can verify the device architecture with:
 uname -m
 ```
 
-For the tested ARM64 device it should report:
+For an ARM64 device it should report:
 
 ```text
 aarch64
