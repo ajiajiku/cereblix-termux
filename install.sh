@@ -55,9 +55,12 @@ log INFO "Compiling APK-derived NeuroMorph engine..."
 clang $CFLAGS -o "$BIN/cereblix-termux" termux_main.c nm_engine.c nm_fast.c nm_neuromorph.c nm_params.c -lm -pthread
 chmod 700 "$BIN/cereblix-termux"
 
-"$BIN/cereblix-termux" --version >/dev/null 2>&1 || true
-
-cat > "$ROOT/config" <<'EOF'
+# Preserve the user's existing configuration across reinstalls/upgrades.
+if [ -f "$ROOT/config" ]; then
+  cp "$ROOT/config" "$ROOT/config.bak"
+fi
+if [ ! -f "$ROOT/config" ]; then
+  cat > "$ROOT/config" <<'EOF'
 # Wallet, worker and threads can be changed here.
 CRB_WALLET=""
 CRB_WORKER="HP1"
@@ -65,6 +68,7 @@ CRB_THREADS=""
 CRB_POOL_HOST="stratum.cereblix.com"
 CRB_POOL_PORT="3333"
 EOF
+fi
 chmod 600 "$ROOT/config"
 
 cat > "$ROOT/start.sh" <<'EOF'
@@ -106,3 +110,4 @@ chmod 700 "$ROOT/start.sh"
 log OK "Installed APK-v2.0-derived Termux miner."
 log INFO "Start with: $ROOT/start.sh"
 log INFO "Worker name: edit $ROOT/config"
+log INFO "Your config is preserved on reinstall."
