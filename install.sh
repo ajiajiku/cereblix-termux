@@ -49,7 +49,7 @@ if [ -d "$SRC/.git" ]; then
   log INFO "Updating upstream source..."
   git -C "$SRC" fetch --depth=1 origin xmrig
   git -C "$SRC" checkout -q xmrig
-  git -C "$SRC" reset --hard -q origin/xmrig
+  git -C "$SRC" reset --hard -q xmrig
 else
   log INFO "Cloning upstream Cereblix source..."
   rm -rf "$SRC"
