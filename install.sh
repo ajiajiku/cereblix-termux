@@ -56,7 +56,6 @@ command -v curl >/dev/null 2>&1 || fail "curl belum tersedia."
 GO_VERSION="$(go version 2>/dev/null || true)"
 log INFO "Go          : ${GO_VERSION:-unknown}"
 
-# Build the known-good HTTP miner from the Cereblix Go source as a fallback.
 if [ -d "$SRC/.git" ]; then
   log INFO "Updating Cereblix source..."
   git -C "$SRC" fetch --depth=1 origin tag xmrig
@@ -74,10 +73,6 @@ CGO_ENABLED=0 GOOS=android GOARCH="$GOARCH" GOTOOLCHAIN=local \
   go build -trimpath -ldflags='-s -w' -o "$HTTP_OUT" ./cmd/cereblix-miner
 chmod 700 "$HTTP_OUT"
 
-# The public Stratum pool requires an actual Stratum client. The earlier script
-# incorrectly treated the Go cereblix-stratum bridge as a miner; it is only a
-# protocol bridge and its source tree has no CMakeLists.txt. Build the official
-# Cereblix XMRig fork source instead.
 STRATUM_OUT="$BIN/cereblix-stratum-miner"
 TARBALL="$ROOT/xmrig-cereblix-src.tar.gz"
 rm -f "$TARBALL"
@@ -89,14 +84,17 @@ if curl -fL --retry 3 --connect-timeout 15 \
     -o "$TARBALL" \
     https://cereblix.com/xmrig-cereblix-src.tar.gz; then
   if tar -xzf "$TARBALL" -C "$XMRIG_SRC"; then
-    # The archive may contain a single top-level directory; locate CMakeLists.txt.
     XROOT="$(find "$XMRIG_SRC" -maxdepth 3 -name CMakeLists.txt -print -quit | sed 's#/CMakeLists.txt$##')"
     if [ -n "$XROOT" ] && [ -f "$XROOT/CMakeLists.txt" ]; then
       BUILD="$XROOT/.termux-build"
       rm -rf "$BUILD"
       log INFO "Building official Cereblix XMRig for Termux/Android ARM..."
+      export CC=clang
+      export CXX=clang++
       if cmake -S "$XROOT" -B "$BUILD" \
           -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_C_COMPILER=clang \
+          -DCMAKE_CXX_COMPILER=clang++ \
           -DWITH_HWLOC=OFF \
           -DWITH_OPENCL=OFF \
           -DWITH_CUDA=OFF \
