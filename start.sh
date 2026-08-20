@@ -15,4 +15,17 @@ CRB_THREADS="${CRB_THREADS:-0}"
 CRB_POOL_HOST="${CRB_POOL_HOST:-stratum.cereblix.com}"
 CRB_POOL_PORT="${CRB_POOL_PORT:-3333}"
 export CRB_WALLET CRB_WORKER CRB_THREADS CRB_POOL_HOST CRB_POOL_PORT
-exec "$BIN" "$CRB_WALLET" "$CRB_WORKER" "$CRB_THREADS"
+
+# Keep the miner as a child so Ctrl+C/Ctrl+TERM is explicitly forwarded.
+"$BIN" "$CRB_WALLET" "$CRB_WORKER" "$CRB_THREADS" &
+PID=$!
+cleanup() {
+  kill -TERM "$PID" 2>/dev/null || true
+  wait "$PID" 2>/dev/null || true
+  exit 130
+}
+trap cleanup INT TERM
+wait "$PID"
+STATUS=$?
+trap - INT TERM
+exit "$STATUS"
