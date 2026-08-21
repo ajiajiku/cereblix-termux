@@ -1,0 +1,13 @@
+JNI exports from lib/arm64-v8a/libnmminer.so
+=============================================
+
+Java_com_cereblix_miner_NativeMiner_selfTest
+Java_com_cereblix_miner_NativeMiner_start
+Java_com_cereblix_miner_NativeMiner_setActive
+Java_com_cereblix_miner_NativeMiner_coreCount
+Java_com_cereblix_miner_NativeMiner_bigCoreCount
+Java_com_cereblix_miner_NativeMiner_setJob
+Java_com_cereblix_miner_NativeMiner_pollShare
+Java_com_cereblix_miner_NativeMiner_hashes
+Java_com_cereblix_miner_NativeMiner_threadHashes
+Java_com_cereblix_miner_NativeMiner_stop
