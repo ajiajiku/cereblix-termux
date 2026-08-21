@@ -16,6 +16,7 @@ Standalone Termux miner based on the Cereblix Android v2.0 native-engine/Stratum
 - Keeps the configuration when the miner is reinstalled/upgraded.
 - Handles `Ctrl+C`/`SIGTERM` cleanly.
 - Reports accepted and rejected shares.
+- Supports optional **autostart when a Termux shell is opened**.
 
 ## Quick install
 
@@ -60,6 +61,25 @@ hashes=... accepted=1 rejected=0
 ```
 
 If `accepted` keeps increasing and `rejected=0`, the miner is communicating with the pool successfully.
+
+## Optional: start mining automatically when Termux opens
+
+After wallet/worker/threads are configured, enable autostart once:
+
+```sh
+echo 'if [ -z "$CEREBLIX_AUTOSTART" ]; then export CEREBLIX_AUTOSTART=1; ~/.local/share/cereblix-termux/start.sh; fi' >> ~/.bashrc
+```
+
+Then close the Termux session and open Termux again. The miner will start automatically using the saved wallet, worker and thread settings.
+
+Important:
+
+- Do not open multiple Termux shells if each shell has autostart enabled, or multiple miner processes may run.
+- Autostart runs when the Termux shell starts; it does **not** guarantee that Android will keep the process alive after the OS kills Termux.
+- To disable autostart, edit `~/.bashrc` and remove the line containing `CEREBLIX_AUTOSTART`.
+- Manual start remains available with `~/.local/share/cereblix-termux/start.sh`.
+
+For the complete beginner guide, including autostart and troubleshooting, see [docs/INSTALL.md](docs/INSTALL.md).
 
 ## Change wallet, worker or threads
 
@@ -117,6 +137,8 @@ The installer preserves the existing wallet and configuration when rebuilding. A
 ```sh
 ~/.local/share/cereblix-termux/start.sh
 ```
+
+If autostart was already enabled in `~/.bashrc`, it remains enabled.
 
 ## Stop the miner
 
