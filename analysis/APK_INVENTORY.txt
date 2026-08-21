@@ -1,0 +1,37 @@
+Cereblix Miner APK v2.0 inventory
+================================
+
+APK SHA256: ccb4dbdc0fa85fda76f155c33359ab549ccad1d4cfcb19f615b36becae94b228
+APK size: 3,352,524 bytes
+
+DEX:
+  classes.dex   6,653,824 bytes
+  classes2.dex    123,844 bytes
+  classes3.dex     41,720 bytes
+
+Native libraries:
+  lib/arm64-v8a/libnmminer.so      42,432 bytes
+  lib/armeabi-v7a/libnmminer.so    34,868 bytes
+  lib/x86_64/libnmminer.so         45,800 bytes
+
+Manifest:
+  package=com.cereblix.miner
+  versionName=2.0
+  versionCode=2
+  minSdkVersion=26
+  targetSdkVersion=34
+  compileSdkVersion=34
+  MainActivity=com.cereblix.miner.MainActivity
+  MiningService=com.cereblix.miner.MiningService
+
+Native ARM64 build:
+  ELF aarch64 shared object
+  Android API 26 linker target
+  NDK r26b
+  BuildID=4525f8e2eee811d80c89ea545536bf8291c02f89
+  NEEDED=liblog.so, libm.so, libdl.so, libc.so
+
+Native SHA256:
+  arm64-v8a:   4d13a81e499dc1f93cca7590697764644e2c80794172c4340ce6fb7a78521587
+  armeabi-v7a: 48939218e1385ce03c38a0e2f91afa95788675b22fd66474f2f99dd81099a
+  x86_64:      0e60b19bbca58c1a4ad386a4b49b6965d69c7dbcee3583247ba0e42a18008a42
