@@ -1,6 +1,6 @@
 # Panduan Instalasi Cereblix Termux
 
-Panduan ini dimulai dari Termux yang belum dikonfigurasi sampai miner berjalan dan mengirim share ke pool.
+Panduan ini dimulai dari Termux yang belum dikonfigurasi sampai miner berjalan, mengirim share ke pool, dan (opsional) berjalan otomatis saat Termux dibuka kembali.
 
 ## 1. Persyaratan
 
@@ -179,7 +179,62 @@ hashes=... accepted=1 rejected=0
 
 Jika angka `accepted` terus bertambah dan `rejected=0`, miner berhasil berkomunikasi dengan pool dan mengirim share yang diterima.
 
-## 9. Cek worker di dashboard
+## 9. Aktifkan mining otomatis saat Termux dibuka
+
+Jika Anda ingin miner **langsung berjalan setiap kali membuka Termux**, fitur ini dapat diaktifkan setelah konfigurasi wallet/worker selesai.
+
+Jalankan sekali:
+
+```sh
+echo 'if [ -z "$CEREBLIX_AUTOSTART" ]; then export CEREBLIX_AUTOSTART=1; ~/.local/share/cereblix-termux/start.sh; fi' >> ~/.bashrc
+```
+
+Setelah itu:
+
+1. Tutup sesi Termux.
+2. Buka Termux kembali.
+3. Miner akan langsung dijalankan.
+
+Output yang diharapkan:
+
+```text
+Cereblix Termux — APK v2.0 native engine
+Pool: stratum.cereblix.com:3333
+Worker: hp1
+Threads: 8
+share accepted: 1
+```
+
+### Penting tentang autostart
+
+- **Wallet tidak perlu dimasukkan lagi.** Wallet tetap diambil dari konfigurasi lokal.
+- Jangan membuka beberapa sesi Termux sekaligus jika semuanya menjalankan autostart, karena dapat menjalankan lebih dari satu miner.
+- Autostart hanya berjalan ketika shell Termux dimulai. Ini **bukan** layanan Android yang menjamin miner tetap hidup setelah Android mematikan proses Termux.
+- Jika Anda ingin menjalankan miner secara manual tanpa membuka sesi baru, gunakan:
+
+```sh
+~/.local/share/cereblix-termux/start.sh
+```
+
+### Menonaktifkan autostart
+
+Untuk menghapus autostart, buka file:
+
+```sh
+nano ~/.bashrc
+```
+
+Hapus baris yang berisi:
+
+```text
+CEREBLIX_AUTOSTART
+```
+
+Simpan file, lalu buka Termux kembali.
+
+> Jika `nano` belum tersedia, pasang dengan `pkg install -y nano`.
+
+## 10. Cek worker di dashboard
 
 Buka dashboard Cereblix dan cari nama worker yang Anda masukkan.
 
@@ -191,7 +246,7 @@ hp1
 
 Worker dapat membutuhkan waktu sebelum muncul atau diperbarui di dashboard. Jangan langsung mengubah konfigurasi hanya karena dashboard belum berubah dalam beberapa detik.
 
-## 10. Menghentikan miner
+## 11. Menghentikan miner
 
 Saat miner sedang berjalan, tekan:
 
@@ -205,15 +260,17 @@ Anda akan kembali ke prompt:
 ~/cereblix-termux $
 ```
 
-## 11. Menjalankan kembali
+## 12. Menjalankan kembali
 
-Tidak perlu mengisi wallet lagi. Cukup:
+Tanpa autostart, jalankan:
 
 ```sh
 ~/.local/share/cereblix-termux/start.sh
 ```
 
-## 12. Mengubah konfigurasi di kemudian hari
+Dengan autostart aktif, miner akan dijalankan ketika shell Termux dibuka.
+
+## 13. Mengubah konfigurasi di kemudian hari
 
 Gunakan:
 
@@ -229,7 +286,7 @@ cat ~/.local/share/cereblix-termux/config
 
 File ini berisi wallet dan **harus tetap privat**.
 
-## 13. Update repository
+## 14. Update repository
 
 Masuk ke repository:
 
@@ -251,7 +308,7 @@ Lalu jalankan installer lagi:
 
 Installer dirancang untuk mempertahankan konfigurasi yang sudah ada saat melakukan rebuild/reinstall.
 
-## 14. Jika muncul `No mirror or mirror group selected`
+## 15. Jika muncul `No mirror or mirror group selected`
 
 Jika terlihat seperti ini:
 
@@ -281,7 +338,7 @@ Pilih mirror utama Termux yang dapat diakses perangkat, lalu ulangi:
 pkg update -y
 ```
 
-## 15. Jika wallet terus diminta
+## 16. Jika wallet terus diminta
 
 Periksa:
 
@@ -297,7 +354,7 @@ CRB_WALLET="crb1..."
 
 Jika baris tersebut ada dan berisi wallet, `start.sh` seharusnya tidak meminta wallet lagi.
 
-## 16. Jika `accepted=0`
+## 17. Jika `accepted=0`
 
 Jangan langsung menganggap miner gagal. Biarkan berjalan beberapa menit.
 
@@ -318,7 +375,7 @@ accepted=3 rejected=0
 
 Waktu munculnya share dapat berubah-ubah.
 
-## 17. Jika `rejected` bertambah
+## 18. Jika `rejected` bertambah
 
 Hentikan miner dengan `Ctrl+C` dan periksa:
 
@@ -330,7 +387,7 @@ Hentikan miner dengan `Ctrl+C` dan periksa:
 
 Jangan membagikan wallet lengkap di screenshot publik.
 
-## 18. Ringkasan paling singkat
+## 19. Ringkasan paling singkat
 
 Jika Termux sudah terpasang, seluruh proses utama cukup:
 
@@ -345,6 +402,12 @@ chmod +x install.sh
 ~/.local/share/cereblix-termux/start.sh
 ```
 
-Pada `--setup`, masukkan wallet, worker, dan jumlah threads.
+Jika ingin **autostart**, setelah konfigurasi selesai jalankan sekali:
 
-Setelah miner berjalan, pastikan output menunjukkan `share accepted` dan `rejected=0`.
+```sh
+echo 'if [ -z "$CEREBLIX_AUTOSTART" ]; then export CEREBLIX_AUTOSTART=1; ~/.local/share/cereblix-termux/start.sh; fi' >> ~/.bashrc
+```
+
+Kemudian tutup dan buka Termux kembali.
+
+Pada `--setup`, masukkan wallet, worker, dan jumlah threads. Setelah miner berjalan, pastikan output menunjukkan `share accepted` dan `rejected=0`.
