@@ -1,84 +1,203 @@
-# Cereblix Termux — APK v2.0-derived
+# Cereblix Termux
 
-This project ports the native mining engine and Stratum contract used by the Cereblix Android miner v2.0 into a standalone Termux program.
+Standalone Termux miner based on the Cereblix Android v2.0 native-engine/Stratum behavior.
 
-## Android 7 target
+> **Target:** Android 7.0+ (API 24+) on ARM64 (`arm64-v8a`) or ARMv7 (`armeabi-v7a`).
+>
+> The installer checks the Android API and CPU ABI before building. The Android 7 target is a compatibility target; it is not a claim that every Android 7 device has been individually tested.
 
-The original APK requires Android 8/API 26+, so it cannot simply be installed on Android 7/API 24. This repository rebuilds the native engine locally for the phone's ARM ABI instead.
+## What it does
 
-Target:
+- Builds the native engine locally inside Termux.
+- Connects to `stratum.cereblix.com:3333`.
+- Supports a custom CRB wallet and worker name.
+- Supports configurable CPU threads (`0` = automatic).
+- Saves the wallet locally so it is **not requested every time**.
+- Keeps the configuration when the miner is reinstalled/upgraded.
+- Handles `Ctrl+C`/`SIGTERM` cleanly.
+- Reports accepted and rejected shares.
 
-- Android 7/API 24+
-- ARM64 (`arm64-v8a`) and ARMv7 (`armeabi-v7a`)
-- Stratum login/job/submit/keepalive flow
-- custom wallet and worker name
-- configurable CPU threads
-- clean Ctrl+C shutdown
+## Quick install
 
-## Install
+If Termux is already installed, start here:
 
 ```sh
+pkg update -y
+pkg install -y git
 git clone https://github.com/ajiajiku/cereblix-termux.git
 cd cereblix-termux
 chmod +x install.sh
 ./install.sh
 ```
 
-The installer builds the native program locally and creates:
+The installer then builds the miner and prepares the local configuration.
+
+## First-time setup
+
+After `./install.sh`, the installer may ask for:
 
 ```text
-~/.local/share/cereblix-termux/bin/cereblix-termux
-~/.local/share/cereblix-termux/start.sh
-~/.local/share/cereblix-termux/config
+CRB wallet address (crb1...):
 ```
 
-On a new installation, `install.sh` asks for the wallet once and saves it in the private config file. Reinstalling does not overwrite an existing wallet.
+Enter your CRB wallet address beginning with `crb1`.
 
-## Start
+Then start the miner:
 
 ```sh
 ~/.local/share/cereblix-termux/start.sh
 ```
 
-If a wallet is already saved, **the miner will not ask for it again**. That is intentional.
+A successful run looks like:
 
-To change the wallet, worker name, or CPU thread count:
+```text
+Cereblix Termux — APK v2.0 native engine
+Pool: stratum.cereblix.com:3333
+Worker: hp1
+Threads: 8
+share accepted: 1
+hashes=... accepted=1 rejected=0
+```
+
+If `accepted` keeps increasing and `rejected=0`, the miner is communicating with the pool successfully.
+
+## Change wallet, worker or threads
+
+Run:
 
 ```sh
 ~/.local/share/cereblix-termux/start.sh --setup
 ```
 
-Then answer the three prompts. The wallet is stored locally in:
+It asks for the wallet, worker name and CPU thread count.
+
+Examples:
+
+- Worker: `hp1`
+- Threads: `8`
+- Threads: `0` for automatic CPU detection
+
+The pool remains:
+
+```text
+stratum.cereblix.com:3333
+```
+
+## Where configuration is stored
+
+The installer creates:
+
+```text
+~/.local/share/cereblix-termux/
+├── bin/cereblix-termux   # compiled miner
+├── source/               # downloaded native source used for the build
+├── config/               # local configuration directory if used by future versions
+├── config                # wallet/worker/thread/pool settings
+└── start.sh              # launcher
+```
+
+The actual current configuration file is:
 
 ```text
 ~/.local/share/cereblix-termux/config
 ```
 
-The config is created with restrictive permissions (`600`). Do not upload it to GitHub because it contains your wallet address.
+It is created with permission `600` and should **never be uploaded to GitHub**, because it contains the wallet address.
 
-## Configuration example
+## Reinstall / update
+
+From the repository directory:
 
 ```sh
-CRB_WALLET="crb1..."
-CRB_WORKER="nmminer-termux"
-CRB_THREADS="0"
-CRB_POOL_HOST="stratum.cereblix.com"
-CRB_POOL_PORT="3333"
+git pull
+./install.sh
 ```
 
-`CRB_THREADS="0"` means automatic CPU core detection.
+The installer preserves the existing wallet and configuration when rebuilding. After installation, start normally with:
 
-## Accepted shares
+```sh
+~/.local/share/cereblix-termux/start.sh
+```
 
-A successful connection should show lines such as:
+## Stop the miner
+
+Press:
 
 ```text
-share accepted: 1
-hashes=... accepted=1 rejected=0
+Ctrl+C
 ```
 
-Keepalive responses such as `status: KEEPALIVED` are normal pool traffic and are **not** counted as rejected shares.
+The launcher forwards the termination signal to the native miner and exits cleanly.
+
+## Troubleshooting
+
+### `No mirror or mirror group selected`
+
+This message from Termux is normally a mirror-selection notice, not a miner error. If package installation continues and ends successfully, you can proceed. If package downloads fail, run:
+
+```sh
+termux-change-repo
+```
+
+and select a working Termux mirror.
+
+### Wallet is requested again
+
+Run:
+
+```sh
+cat ~/.local/share/cereblix-termux/config
+```
+
+There should be a line beginning with:
+
+```text
+CRB_WALLET="crb1..."
+```
+
+If the wallet is present, `start.sh` should use it automatically.
+
+### `accepted=0` for a while
+
+Keep the miner running for several minutes. Hashrate and share timing can vary. A connection is confirmed when accepted shares begin increasing.
+
+### `rejected` is increasing
+
+Stop with `Ctrl+C` and check the wallet, worker name, pool host and port. Do not repeatedly change working configuration while the miner is actively submitting shares.
+
+### Unsupported device
+
+The installer requires:
+
+- Android API 24 or newer (Android 7.0+)
+- `arm64-v8a` or `armeabi-v7a`
+- Termux with a working package repository
+
+## Full installation guide
+
+For a beginner-friendly guide starting with a fresh Android device and a fresh Termux installation, see:
+
+**[docs/INSTALL.md](docs/INSTALL.md)**
+
+## Security notes
+
+- Never paste your wallet into a public GitHub file, issue, pull request or screenshot.
+- The local config is intended to stay on the device.
+- Only install Termux from a trusted source. The project documentation recommends the F-Droid distribution for Termux.
+
+## Project structure
+
+```text
+cereblix-termux/
+├── README.md
+├── docs/
+│   └── INSTALL.md
+├── install.sh
+├── start.sh
+├── src/
+└── analysis/
+```
 
 ## Source / license
 
-The upstream Android application and native source remain owned/licensed by their original project. This repository contains the Termux bridge, build orchestration, and analysis derived from the supplied APK.
+The upstream Android application and native source remain owned/licensed by their original project. This repository contains the Termux bridge, build orchestration, and analysis derived from the supplied APK/source material.
