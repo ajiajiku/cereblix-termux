@@ -91,12 +91,11 @@ The installer creates:
 ~/.local/share/cereblix-termux/
 ├── bin/cereblix-termux   # compiled miner
 ├── source/               # downloaded native source used for the build
-├── config/               # local configuration directory if used by future versions
 ├── config                # wallet/worker/thread/pool settings
 └── start.sh              # launcher
 ```
 
-The actual current configuration file is:
+The configuration file is:
 
 ```text
 ~/.local/share/cereblix-termux/config
