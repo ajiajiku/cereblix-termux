@@ -6,18 +6,42 @@ CFG="$ROOT/config"
 [ -x "$BIN" ] || { echo "Belum terpasang. Jalankan ./install.sh terlebih dahulu."; exit 1; }
 [ -f "$CFG" ] && . "$CFG"
 
+# Run "start.sh --setup" when you want to change the saved wallet/worker.
+if [ "${1:-}" = "--setup" ]; then
+  printf 'CRB wallet address (crb1...): '
+  read -r CRB_WALLET
+  case "$CRB_WALLET" in
+    crb1[0-9a-z]*) ;;
+    *) echo 'Format wallet tidak valid (harus diawali crb1).'; exit 1 ;;
+  esac
+  printf 'Worker name [%s]: ' "${CRB_WORKER:-nmminer-termux}"
+  read -r new_worker
+  CRB_WORKER="${new_worker:-${CRB_WORKER:-nmminer-termux}}"
+  printf 'Threads [0 = otomatis, %s]: ' "${CRB_THREADS:-0}"
+  read -r new_threads
+  CRB_THREADS="${new_threads:-${CRB_THREADS:-0}}"
+  {
+    printf '# Wallet, worker and threads can be changed here.\n'
+    printf 'CRB_WALLET="%s"\n' "$CRB_WALLET"
+    printf 'CRB_WORKER="%s"\n' "$CRB_WORKER"
+    printf 'CRB_THREADS="%s"\n' "$CRB_THREADS"
+    printf 'CRB_POOL_HOST="%s"\n' "${CRB_POOL_HOST:-stratum.cereblix.com}"
+    printf 'CRB_POOL_PORT="%s"\n' "${CRB_POOL_PORT:-3333}"
+  } > "$CFG"
+  chmod 600 "$CFG"
+  echo "Konfigurasi tersimpan."
+  exit 0
+fi
+
 # Ask for the wallet only when no wallet has been saved yet.
 if [ -z "${CRB_WALLET:-}" ]; then
   printf 'CRB wallet address (crb1...): '
   read -r CRB_WALLET
-  if [ -n "$CRB_WALLET" ]; then
-    case "$CRB_WALLET" in
-      crb1[0-9a-z]*) ;;
-      *) echo 'Format wallet tidak valid (harus diawali crb1).'; exit 1 ;;
-    esac
-    # Save the wallet so the next run does not ask again.
-    sed -i "s|^CRB_WALLET=.*$|CRB_WALLET=\"$CRB_WALLET\"|" "$CFG"
-  fi
+  case "$CRB_WALLET" in
+    crb1[0-9a-z]*) ;;
+    *) echo 'Format wallet tidak valid (harus diawali crb1).'; exit 1 ;;
+  esac
+  sed -i "s|^CRB_WALLET=.*$|CRB_WALLET=\"$CRB_WALLET\"|" "$CFG"
 fi
 [ -n "$CRB_WALLET" ] || { echo 'Wallet wajib diisi.'; exit 1; }
 CRB_WORKER="${CRB_WORKER:-nmminer-termux}"
