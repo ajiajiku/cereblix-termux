@@ -2,42 +2,18 @@
 
 This project ports the native mining engine and Stratum contract used by the Cereblix Android miner v2.0 into a standalone Termux program.
 
-## Direct APK analysis
+## Android 7 target
 
-The supplied `cereblix-miner-universal-v2.0.apk` was inspected directly. The extracted evidence is stored under `analysis/`.
+The original APK requires Android 8/API 26+, so it cannot simply be installed on Android 7/API 24. This repository rebuilds the native engine locally for the phone's ARM ABI instead.
 
-Key findings:
+Target:
 
-- Package: `com.cereblix.miner`
-- Version: `2.0` / version code `2`
-- Compile/target SDK: `34`
-- **APK minimum SDK: `26` (Android 8.0)**
-- Native payload: `libnmminer.so` for ARM64, ARMv7 and x86_64
-- Native libraries report an Android API 26 linker target
-- JNI class: `com.cereblix.miner.NativeMiner`
-- Kotlin components include `MiningService` and `StratumClient`
-- Stratum methods observed: `login`, `submit`, `keepalived`
-- Agent observed: `nmminer-android/2.0`
-
-**Important Android 7 finding:** the original APK and its bundled native binaries cannot simply be copied to Android 7/API 24. The Termux version therefore needs a compatible local native rebuild rather than reusing the APK's API-26 binary.
-
-See:
-
-- `analysis/APK_ANALYSIS.md`
-- `analysis/APK_INVENTORY.txt`
-- `analysis/JNI_SYMBOLS.txt`
-
-## Goal
-
-Run the same core mining path on Android 7+ / API 24+:
-
-- compatible native mining engine
-- Stratum login/job/submit flow used by the Android client
-- custom wallet address
-- custom worker/rig name
+- Android 7/API 24+
+- ARM64 (`arm64-v8a`) and ARMv7 (`armeabi-v7a`)
+- Stratum login/job/submit/keepalive flow
+- custom wallet and worker name
 - configurable CPU threads
-- ARM64 and ARMv7 builds
-- clean `Ctrl+C` shutdown
+- clean Ctrl+C shutdown
 
 ## Install
 
@@ -48,7 +24,7 @@ chmod +x install.sh
 ./install.sh
 ```
 
-The installer builds the native program locally for the phone's ARM ABI and creates:
+The installer builds the native program locally and creates:
 
 ```text
 ~/.local/share/cereblix-termux/bin/cereblix-termux
@@ -56,21 +32,7 @@ The installer builds the native program locally for the phone's ARM ABI and crea
 ~/.local/share/cereblix-termux/config
 ```
 
-## Configure
-
-```sh
-nano ~/.local/share/cereblix-termux/config
-```
-
-Example:
-
-```sh
-CRB_WALLET="crb1..."
-CRB_WORKER="HP1"
-CRB_THREADS="4"
-CRB_POOL_HOST="stratum.cereblix.com"
-CRB_POOL_PORT="3333"
-```
+On a new installation, `install.sh` asks for the wallet once and saves it in the private config file. Reinstalling does not overwrite an existing wallet.
 
 ## Start
 
@@ -78,11 +40,44 @@ CRB_POOL_PORT="3333"
 ~/.local/share/cereblix-termux/start.sh
 ```
 
-Press **Ctrl+C** to stop.
+If a wallet is already saved, **the miner will not ask for it again**. That is intentional.
 
-## Compatibility
+To change the wallet, worker name, or CPU thread count:
 
-The target for this repository is Android 7/API 24+. The supplied APK itself is Android 8/API 26+, so APK binaries are treated as reference material only. The native engine must be rebuilt against an API-24-compatible Android toolchain for a genuine Android 7 build.
+```sh
+~/.local/share/cereblix-termux/start.sh --setup
+```
+
+Then answer the three prompts. The wallet is stored locally in:
+
+```text
+~/.local/share/cereblix-termux/config
+```
+
+The config is created with restrictive permissions (`600`). Do not upload it to GitHub because it contains your wallet address.
+
+## Configuration example
+
+```sh
+CRB_WALLET="crb1..."
+CRB_WORKER="nmminer-termux"
+CRB_THREADS="0"
+CRB_POOL_HOST="stratum.cereblix.com"
+CRB_POOL_PORT="3333"
+```
+
+`CRB_THREADS="0"` means automatic CPU core detection.
+
+## Accepted shares
+
+A successful connection should show lines such as:
+
+```text
+share accepted: 1
+hashes=... accepted=1 rejected=0
+```
+
+Keepalive responses such as `status: KEEPALIVED` are normal pool traffic and are **not** counted as rejected shares.
 
 ## Source / license
 
